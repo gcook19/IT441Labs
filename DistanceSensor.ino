@@ -15,8 +15,8 @@ const char* greenURL = "http://192.168.1.244/green";
 const char* blinkURL = "http://192.168.1.244/blink";
 
 //Wifi settings
-char ssid[] = "165 E 2100 N";
-char pass[] = "165e2100n";
+char ssid[] = "SSID";
+char pass[] = "PASSWORD";
 
 
 
