@@ -1,0 +1,112 @@
+# Configure a default setup of Home Assistant (frontend, api, etc)
+default_config:
+
+# Uncomment this if you are using SSL/TLS, running in Docker container, etc.
+# http:
+#   base_url: example.duckdns.org:8123
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+group: !include groups.yaml
+automation: !include automations.yaml
+script: !include scripts.yaml
+
+homeassistant:
+  # Specify what methods a user can use to log in
+  auth_providers:  
+    - type: homeassistant
+#   - type: legacy_api_password
+      # Can be used if you would like a master password to be an authentication method
+#     api_password: <UNIVERSAL PASSWORD HERE>
+    - type: trusted_networks
+      # If a device is attempting to log in from one of these networks, no password will be necessary
+      trusted_networks:
+        - 192.168.137.0/24
+        - 127.0.0.1
+
+# For some reason, I couldn't log in without this in the configuration file
+auth:   
+
+# Sets up the MQTT broker, which in this case is my computer's Mosquitto server
+mqtt:
+    # The IP of the Mosquitto server
+  broker: 192.168.137.1
+    # What the Home Assistant client should check in as
+  client_id: homeassistant      
+  discovery: true
+    # The MQTT Topic to watch (subscribe to)
+  discovery_prefix: garage    
+
+# These sensors either pull data directly from an MQTT Topic, or they use a template style to adjust the wording of a topic's value
+sensor:
+    # Directly returns the value of garage/doorSwitch (a 0 or 1)
+  - platform: mqtt
+    name: "Door Switch MQTT"
+    state_topic: "garage/doorSwitch"
+    # Directly returns the value of garage/echoSwitch/color (a g, y, r, b, or o)
+  - platform: mqtt
+    name: "Echo Sensor Color MQTT"
+    state_topic: "garage/echoSwitch/color"
+    
+    # A template "adjusts" the values from a MQTT sensor to make it more readable and user friendly
+    # This makes the Door Switch MQTT either return "Opened" or "Closed"
+  - platform: template
+    sensors:
+      door_switch:
+        friendly_name: "Door Switch"
+        value_template: >-
+          {% if is_state('sensor.door_switch_mqtt', '1') %}
+            Opened
+          {% else %}
+            Closed
+          {% endif %}
+          
+    # Another template to adjust values from a MQTT sensor
+    # This returns the full color names of the stoplight's status
+  - platform: template
+    sensors:
+      stoplight_color:
+        friendly_name: "Stoplight Color"
+        value_template: >-
+          {% if is_state('sensor.echo_sensor_color_mqtt', 'g') %}
+            Green
+          {% elif is_state('sensor.echo_sensor_color_mqtt', 'y') %}
+            Yellow
+          {% elif is_state('sensor.echo_sensor_color_mqtt', 'r') %}
+            Red
+          {% elif is_state('sensor.echo_sensor_color_mqtt', 'b') %}
+            Blinking Red
+          {% else %}
+            Off
+          {% endif %}
+    
+    # This template detects how close the car is to guess if the car is parked in the garage (the last sensor reading was close by) or the car is away (the last reading was far away, so the garage is likely empty). It ignores the off state to continue showing the car's status while the door is shut.
+  - platform: template
+    sensors:
+      car_in_garage:
+        friendly_name: "Car in Garage"
+        value_template: >-
+          {% if is_state("sensor.echo_sensor_color_mqtt", "y") or
+              is_state("sensor.echo_sensor_color_mqtt", "r") or
+              is_state("sensor.echo_sensor_color_mqtt", "b") %}
+            The Car is Currently at Home
+          {% elif is_state("sensor.echo_sensor_color_mqtt", "g") %}
+            The Car is Gone
+          {% else %}
+            {{ states.sensor.car_in_garage.state }}
+          {% endif %}
+
+# This switch reads the same garage/doorSwitch topic as a sensor, but we can press a button to send a 0 or 1 to the MQTT topic directly to "manually override" the sensor
+switch:
+  - platform: mqtt
+    name: Command Door
+    state_topic: "garage/doorSwitch"
+    command_topic: "garage/doorSwitch"
+    payload_on: "1"
+    payload_off: "0"
+
+# To use the IFTTT webhook integration, your key should be placed here (obtained from https://ifttt.com/maker_webhooks)
+ifttt:
+  key: <IFTTT KEY GOES HERE>
